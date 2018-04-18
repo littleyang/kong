@@ -2,6 +2,7 @@ local Errors      = require "kong.db.errors"
 local responses   = require "kong.tools.responses"
 local utils       = require "kong.tools.utils"
 local app_helpers = require "lapis.application"
+local unescape    = require("socket.url").unescape
 
 
 local escape_uri  = ngx.escape_uri
@@ -51,17 +52,27 @@ end
 local function select_by_param(dao, unique_field_names, param)
   -- TODO: composite key support
   if utils.is_valid_uuid(param) then
-    return dao:select({ id = param })
-  end
-
-  for _, fname in ipairs(unique_field_names) do
-    local row, err, err_t = dao["select_by_" .. fname](dao, param)
+    local entity, err, err_t = dao:select({ id = param })
     if err_t then
       return nil, err, err_t
     end
 
-    if row then
-      return row
+    if entity then
+      return entity
+    end
+  end
+
+  local param = unescape(param)
+
+  for i = 1, #unique_field_names do
+    local fname = unique_field_names[i]
+    local entity, err, err_t = dao["select_by_" .. fname](dao, param)
+    if err_t then
+      return nil, err, err_t
+    end
+
+    if entity then
+      return entity
     end
   end
 end
@@ -251,16 +262,22 @@ local function patch_entity_endpoint(schema_name,
   return function(self, db, helpers)
     local entity, _, err_t
 
+    local args_post = self.args.post
+
+    if not next(args_post) then
+      responses.send(400, "empty body")
+    end
+
     if not parent_schema_name then
       local dao = db[schema_name]
       -- TODO: composite key support
       local id = self.params[schema_name]
       if utils.is_valid_uuid(id) then
-        entity, _, err_t = dao:update({ id = id }, self.args.post)
+        entity, _, err_t = dao:update({ id = id }, args_post)
 
       elseif #entity_unique_field_names == 1 then
         local fname = entity_unique_field_names[1]
-        entity, _, err_t = dao["update_by_" .. fname](dao, id, self.args.post)
+        entity, _, err_t = dao["update_by_" .. fname](dao, id, args_post)
 
       else
         entity, _, err_t = select_by_param(dao,
@@ -274,7 +291,7 @@ local function patch_entity_endpoint(schema_name,
           return helpers.responses.send_HTTP_NOT_FOUND()
         end
 
-        entity, _, err_t = dao:update({ id = entity.id }, self.args.post)
+        entity, _, err_t = dao:update({ id = entity.id }, args_post)
       end
 
     else
@@ -294,7 +311,7 @@ local function patch_entity_endpoint(schema_name,
       end
 
       entity, _, err_t = db[schema_name]:update(parent_entity[entity_name],
-                                                self.args.post)
+                                                args_post)
     end
 
     if err_t then

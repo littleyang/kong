@@ -3,7 +3,6 @@ local utils         = require "kong.tools.utils"
 local responses     = require "kong.tools.responses"
 local app_helpers   = require "lapis.application"
 
-
 local decode_base64 = ngx.decode_base64
 local encode_base64 = ngx.encode_base64
 local encode_args   = ngx.encode_args
@@ -83,17 +82,24 @@ end
 
 function _M.find_consumer_by_username_or_id(self, dao_factory, helpers)
   local username_or_id = self.params.username_or_id
-  local db = dao_factory.new_db
+  local db = assert(dao_factory.db.new_db)
   local consumer, err
   if utils.is_valid_uuid(username_or_id) then
     consumer, err = db.consumers:select({ id = username_or_id })
-  else
-    consumer, err = db.consumers:select_by_username(username_or_id)
+
+    if err then
+      return helpers.yield_error(err)
+    end
   end
 
-  if err then
-    return helpers.yield_error(err)
+  if not consumer then
+    consumer, err = db.consumers:select_by_username(username_or_id)
+
+    if err then
+      return helpers.yield_error(err)
+    end
   end
+
   self.params.username_or_id = nil
 
   -- We know username and id are unique, so if we have a row, it must be the only one

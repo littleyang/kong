@@ -12,12 +12,14 @@ end
 
 for _, strategy in helpers.each_strategy() do
 
-describe("Admin API", function()
+describe("Admin API (" .. strategy .. "): ", function()
+  local bp
+  local db
   local dao
   local client
 
   setup(function()
-    _, _, dao = helpers.get_db_utils(strategy)
+    bp, db, dao = helpers.get_db_utils(strategy)
     assert(helpers.start_kong({
       database = strategy
     }))
@@ -29,16 +31,17 @@ describe("Admin API", function()
 
   local consumer, consumer2, consumer3
   before_each(function()
+    assert(db:truncate())
     dao:truncate_tables()
-    consumer = assert(dao.consumers:insert {
+    consumer = assert(bp.consumers:insert {
       username = "bob",
-      custom_id = "1234"
+      custom_id = "wxyz"
     })
-    consumer2 = assert(dao.consumers:insert {
+    consumer2 = assert(bp.consumers:insert {
       username = "bob pop",  -- containing space for urlencoded test
       custom_id = "abcd"
     })
-    consumer3 = assert(dao.consumers:insert {
+    consumer3 = assert(bp.consumers:insert {
       username = "83825bb5-38c7-4160-8c23-54dd2b007f31",  -- uuid format
       custom_id = "1a2b"
     })
@@ -79,12 +82,10 @@ describe("Admin API", function()
             })
             local body = assert.res_status(400, res)
             local json = cjson.decode(body)
+            assert.equal("schema violation", json.name)
             assert.same(
-              {
-                custom_id = "At least a 'custom_id' or a 'username' must be specified",
-                username  = "At least a 'custom_id' or a 'username' must be specified"
-              },
-              json
+              { "at least one of these fields must be non-empty: 'custom_id', 'username'" },
+              json.fields["@entity"]
             )
           end
         end)
@@ -100,10 +101,11 @@ describe("Admin API", function()
             })
             local body = assert.res_status(409, res)
             local json = cjson.decode(body)
-            assert.same({ username = "already exists with value 'bob'" }, json)
+            assert.equal("unique constraint violation", json.name)
+            assert.equal("UNIQUE violation detected on '{username=\"bob\"}'", json.message)
           end
         end)
-        it_content_types("returns 409 on conflicting custom_id", function(content_type)
+        it_content_types("returns 400 on conflicting custom_id", function(content_type)
           return function()
             local res = assert(client:send {
               method = "POST",
@@ -116,7 +118,8 @@ describe("Admin API", function()
             })
             local body = assert.res_status(409, res)
             local json = cjson.decode(body)
-            assert.same({ custom_id = "already exists with value '1234'" }, json)
+            assert.equal("unique constraint violation", json.name)
+            assert.equal("UNIQUE violation detected on '{custom_id=\"wxyz\"}'", json.message)
           end
         end)
         it("returns 415 on invalid content-type", function()
@@ -154,10 +157,10 @@ describe("Admin API", function()
           })
           local body = assert.res_status(400, res)
           local json = cjson.decode(body)
-          assert.same({
-            custom_id = "At least a 'custom_id' or a 'username' must be specified",
-            username  = "At least a 'custom_id' or a 'username' must be specified",
-          }, json)
+          assert.equals("schema violation", json.name)
+          assert.same(
+            { "at least one of these fields must be non-empty: 'custom_id', 'username'" },
+            json.fields["@entity"])
         end)
         it("returns 400 on missing body with multipart/x-www-form-urlencoded", function()
           local res = assert(client:request {
@@ -167,10 +170,10 @@ describe("Admin API", function()
           })
           local body = assert.res_status(400, res)
           local json = cjson.decode(body)
-          assert.same({
-            custom_id = "At least a 'custom_id' or a 'username' must be specified",
-            username  = "At least a 'custom_id' or a 'username' must be specified",
-          }, json)
+          assert.equals("schema violation", json.name)
+          assert.same(
+            { "at least one of these fields must be non-empty: 'custom_id', 'username'" },
+            json.fields["@entity"])
         end)
         it("returns 400 on missing body with no content-type header", function()
           local res = assert(client:request {
@@ -179,214 +182,22 @@ describe("Admin API", function()
           })
           local body = assert.res_status(400, res)
           local json = cjson.decode(body)
-          assert.same({
-            custom_id = "At least a 'custom_id' or a 'username' must be specified",
-            username  = "At least a 'custom_id' or a 'username' must be specified",
-          }, json)
-        end)
-      end)
-    end)
-
-    describe("PUT", function()
-      it_content_types("creates if not exists", function(content_type)
-        return function()
-          local res = assert(client:send {
-            method = "PUT",
-            path = "/consumers",
-            body = {
-              username = "consumer-post"
-            },
-            headers = {["Content-Type"] = content_type}
-          })
-          local body = assert.res_status(201, res)
-          local json = cjson.decode(body)
-          assert.equal("consumer-post", json.username)
-          assert.is_number(json.created_at)
-          assert.is_string(json.id)
-        end
-      end)
-      it_content_types("replaces if exists", function(content_type)
-        return function()
-          local res = assert(client:send {
-            method = "POST",
-            path = "/consumers",
-            body = {
-              username = "alice"
-            },
-            headers = {["Content-Type"] = content_type}
-          })
-          local body = assert.res_status(201, res)
-          local json = cjson.decode(body)
-
-          res = assert(client:send {
-            method = "PUT",
-            path = "/consumers",
-            body = {
-              id = json.id,
-              username = "alicia",
-              custom_id = "0000",
-              created_at = 1461276890000
-            },
-            headers = {["Content-Type"] = content_type}
-          })
-          body = assert.res_status(200, res)
-          local updated_json = cjson.decode(body)
-          assert.equal("alicia", updated_json.username)
-          assert.equal("0000", updated_json.custom_id)
-          assert.equal(json.id, updated_json.id)
-        end
-      end)
-      it_content_types("returns 404 when specifying non-existent primary key values", function(content_type)
-        -- Note: while not an appropriate behavior for PUT, our current
-        -- behavior for this method is the following:
-        -- 1. if the payload does not have the entity's primary key values,
-        --    we attempt an insert()
-        -- 2. if the payload has primary key values, we attempt an update()
-        --
-        -- This is a regression added after investigating the following issue:
-        --     https://github.com/Kong/kong/issues/2774
-        --
-        -- Eventually, our Admin endpoint will follow a more appropriate
-        -- behavior for PUT.
-        local res = assert(helpers.admin_client():send {
-          method = "PUT",
-          path = "/consumers",
-          body = {
-            id = utils.uuid(),
-            username = "alice",
-            created_at = 1461276890000,
-          },
-          headers = { ["Content-Type"] = content_type },
-        })
-        assert.res_status(404, res)
-      end)
-      describe("errors", function()
-        it_content_types("handles invalid input", function(content_type)
-          return function()
-            local res = assert(client:send {
-              method = "PUT",
-              path = "/consumers",
-              body = {},
-              headers = {["Content-Type"] = content_type}
-            })
-            local body = assert.res_status(400, res)
-            local json = cjson.decode(body)
-            assert.same(
-              {
-                custom_id = "At least a 'custom_id' or a 'username' must be specified",
-                username  = "At least a 'custom_id' or a 'username' must be specified"
-              },
-              json
-            )
-          end
-        end)
-        it_content_types("returns 409 on conflict", function(content_type)
-          -- @TODO this particular test actually defeats the purpose of PUT.
-          -- It should probably replace the entity
-          return function()
-            local res = assert(client:send {
-              method = "PUT",
-              path = "/consumers",
-              body = {
-                username = "alice"
-              },
-              headers = {["Content-Type"] = content_type}
-            })
-            assert.res_status(201, res)
-
-            res = assert(client:send {
-              method = "PUT",
-              path = "/consumers",
-              body = {
-                username = "alice",
-                custom_id = "0000"
-              },
-              headers = {["Content-Type"] = content_type}
-            })
-            local body = assert.res_status(409, res)
-            local json = cjson.decode(body)
-            assert.same({ username = "already exists with value 'alice'" }, json)
-          end
-        end)
-        it("returns 415 on invalid content-type", function()
-          local res = assert(client:request {
-            method = "PUT",
-            path = "/consumers",
-            body = '{"hello": "world"}',
-            headers = {["Content-Type"] = "invalid"}
-          })
-          assert.res_status(415, res)
-        end)
-        it("returns 415 on missing content-type with body ", function()
-          local res = assert(client:request {
-            method = "PUT",
-            path = "/consumers",
-            body = "invalid"
-          })
-          assert.res_status(415, res)
-        end)
-        it("returns 400 on missing body with application/json", function()
-          local res = assert(client:request {
-            method = "PUT",
-            path = "/consumers",
-            headers = {["Content-Type"] = "application/json"}
-          })
-          local body = assert.res_status(400, res)
-          local json = cjson.decode(body)
-          assert.same({ message = "Cannot parse JSON body" }, json)
-        end)
-        it("returns 400 on missing body with multipart/form-data", function()
-          local res = assert(client:request {
-            method = "PUT",
-            path = "/consumers",
-            headers = {["Content-Type"] = "multipart/form-data"}
-          })
-          local body = assert.res_status(400, res)
-          local json = cjson.decode(body)
-          assert.same({
-            custom_id = "At least a 'custom_id' or a 'username' must be specified",
-            username  = "At least a 'custom_id' or a 'username' must be specified",
-          }, json)
-        end)
-        it("returns 400 on missing body with multipart/x-www-form-urlencoded", function()
-          local res = assert(client:request {
-            method = "PUT",
-            path = "/consumers",
-            headers = {["Content-Type"] = "application/x-www-form-urlencoded"}
-          })
-          local body = assert.res_status(400, res)
-          local json = cjson.decode(body)
-          assert.same({
-            custom_id = "At least a 'custom_id' or a 'username' must be specified",
-            username  = "At least a 'custom_id' or a 'username' must be specified",
-          }, json)
-        end)
-        it("returns 400 on missing body with no content-type header", function()
-          local res = assert(client:request {
-            method = "PUT",
-            path = "/consumers",
-          })
-          local body = assert.res_status(400, res)
-          local json = cjson.decode(body)
-          assert.same({
-            custom_id = "At least a 'custom_id' or a 'username' must be specified",
-            username  = "At least a 'custom_id' or a 'username' must be specified",
-          }, json)
+          assert.equals("schema violation", json.name)
+          assert.same(
+            { "at least one of these fields must be non-empty: 'custom_id', 'username'" },
+            json.fields["@entity"])
         end)
       end)
     end)
 
     describe("GET", function()
       before_each(function()
+        assert(db:truncate())
         dao:truncate_tables()
-
-        for i = 1, 10 do
-          assert(dao.consumers:insert {
-            username = "consumer-" .. i,
-          })
-        end
+        bp.consumers:insert_n(10)
       end)
       teardown(function()
+        assert(db:truncate())
         dao:truncate_tables()
       end)
 
@@ -398,7 +209,6 @@ describe("Admin API", function()
         res = assert.res_status(200, res)
         local json = cjson.decode(res)
         assert.equal(10, #json.data)
-        assert.equal(10, json.total)
       end)
       it("paginates a set", function()
         local pages = {}
@@ -412,7 +222,6 @@ describe("Admin API", function()
           })
           local body = assert.res_status(200, res)
           local json = cjson.decode(body)
-          assert.equal(10, json.total)
 
           if i < 4 then
             assert.equal(3, #json.data)
@@ -428,16 +237,6 @@ describe("Admin API", function()
           offset = json.offset
           pages[i] = json
         end
-      end)
-      it("handles invalid filters", function()
-        local res = assert(client:send {
-          method = "GET",
-          path = "/consumers",
-          query = {foo = "bar"}
-        })
-        local body = assert.res_status(400, res)
-        local json = cjson.decode(body)
-        assert.same({ foo = "unknown field" }, json)
       end)
     end)
     it("returns 405 on invalid method", function()
@@ -518,7 +317,7 @@ describe("Admin API", function()
             assert.equal("alice", json.username)
             assert.equal(consumer.id, json.id)
 
-            local in_db = assert(dao.consumers:find {id = consumer.id})
+            local in_db = assert(db.consumers:select {id = consumer.id})
             assert.same(json, in_db)
           end
         end)
@@ -537,7 +336,7 @@ describe("Admin API", function()
             assert.equal("alice", json.username)
             assert.equal(consumer.id, json.id)
 
-            local in_db = assert(dao.consumers:find {id = consumer.id})
+            local in_db = assert(db.consumers:select {id = consumer.id})
             assert.same(json, in_db)
           end
         end)
@@ -758,161 +557,6 @@ describe("Admin API", function()
       end)
     end)
 
-    describe("PUT", function()
-      it_content_types("creates if not exists", function(content_type)
-        return function()
-          local res = assert(client:send {
-            method = "PUT",
-            path = "/consumers/" .. consumer.id .. "/plugins",
-            body = {
-              name = "rewriter",
-              ["config.value"] = "potato",
-            },
-            headers = {["Content-Type"] = content_type}
-          })
-          local body = assert.res_status(201, res)
-          local json = cjson.decode(body)
-          assert.equal("rewriter", json.name)
-          assert.equal("potato", json.config.value)
-        end
-      end)
-      it_content_types("replaces if exists", function(content_type)
-        return function()
-          local res = assert(client:send {
-            method = "PUT",
-            path = "/consumers/" .. consumer.id .. "/plugins",
-            body = {
-              name = "rewriter",
-              ["config.value"] = "potato",
-              created_at = 1461276890000
-            },
-            headers = {["Content-Type"] = content_type}
-          })
-          local body = assert.res_status(201, res)
-          local json = cjson.decode(body)
-
-          res = assert(client:send {
-            method = "PUT",
-            path = "/consumers/" .. consumer.id .. "/plugins",
-            body = {
-              id = json.id,
-              name = "rewriter",
-              ["config.value"] = "carrot",
-              created_at = 1461276890000
-            },
-            headers = {["Content-Type"] = content_type}
-          })
-          body = assert.res_status(200, res)
-          json = cjson.decode(body)
-          assert.equal("rewriter", json.name)
-          assert.equal("carrot", json.config.value)
-        end
-      end)
-      it_content_types("prefers default values when replacing", function(content_type)
-        return function()
-          local plugin = assert(dao.plugins:insert {
-            name = "rewriter",
-            consumer_id = consumer.id,
-            config = { value = "potato", extra = "super" }
-          })
-          assert.equal("potato", plugin.config.value)
-          assert.equal("super", plugin.config.extra)
-
-          local res = assert(client:send {
-            method = "PUT",
-            path = "/consumers/" .. consumer.id .. "/plugins",
-            body = {
-              id = plugin.id,
-              name = "rewriter",
-              ["config.value"] = "carrot",
-              created_at = 1461276890000
-            },
-            headers = {["Content-Type"] = content_type}
-          })
-          local body = assert.res_status(200, res)
-          local json = cjson.decode(body)
-          assert.equal(json.config.value, "carrot")
-          assert.equal(json.config.extra, "extra") -- changed to the default value
-
-          plugin = assert(dao.plugins:find {
-            id = plugin.id,
-            name = plugin.name
-          })
-          assert.equal(plugin.config.value, "carrot")
-          assert.equal(plugin.config.extra, "extra") -- changed to the default value
-        end
-      end)
-      it_content_types("overrides a plugin previous config if partial", function(content_type)
-        return function()
-          local plugin = assert(dao.plugins:insert {
-            name = "rewriter",
-            consumer_id = consumer.id
-          })
-          assert.equal("extra", plugin.config.extra)
-
-          local res = assert(client:send {
-            method = "PUT",
-            path = "/consumers/" .. consumer.id .. "/plugins",
-            body = {
-              id = plugin.id,
-              name = "rewriter",
-              ["config.extra"] = "super",
-              created_at = 1461276890000
-            },
-            headers = {["Content-Type"] = content_type}
-          })
-          local body = assert.res_status(200, res)
-          local json = cjson.decode(body)
-          assert.same("super", json.config.extra)
-        end
-      end)
-      it_content_types("updates the enabled property", function(content_type)
-        return function()
-          local plugin = assert(dao.plugins:insert {
-            name = "rewriter",
-            consumer_id = consumer.id
-          })
-          assert.True(plugin.enabled)
-
-          local res = assert(client:send {
-            method = "PUT",
-            path = "/consumers/" .. consumer.id .. "/plugins",
-            body = {
-              id = plugin.id,
-              name = "rewriter",
-              enabled = false,
-              created_at = 1461276890000
-            },
-            headers = {["Content-Type"] = content_type}
-          })
-          local body = assert.res_status(200, res)
-          local json = cjson.decode(body)
-          assert.False(json.enabled)
-
-          plugin = assert(dao.plugins:find {
-            id = plugin.id,
-            name = plugin.name
-          })
-          assert.False(plugin.enabled)
-        end
-      end)
-      describe("errors", function()
-        it_content_types("handles invalid input", function(content_type)
-          return function()
-            local res = assert(client:send {
-              method = "PUT",
-              path = "/consumers/" .. consumer.id .. "/plugins",
-              body = {},
-              headers = {["Content-Type"] = content_type}
-            })
-            local body = assert.res_status(400, res)
-            local json = cjson.decode(body)
-            assert.same({ name = "name is required" }, json)
-          end
-        end)
-      end)
-    end)
-
     describe("GET", function()
       it("retrieves the first page", function()
         assert(dao.plugins:insert {
@@ -977,10 +621,10 @@ describe("Admin API", function()
       end)
       it("only retrieves if associated to the correct consumer", function()
         -- Create an consumer and try to query our plugin through it
-        local w_consumer = assert(dao.consumers:insert {
+        local w_consumer = bp.consumers:insert {
           custom_id = "wc",
           username = "wrong-consumer"
-        })
+        }
 
         -- Try to request the plugin through it (belongs to the fixture consumer instead)
         local res = assert(client:send {
