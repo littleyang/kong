@@ -1,20 +1,15 @@
-local dao_helpers = require "spec.02-integration.03-dao.helpers"
-local Factory = require "kong.dao.factory"
 local utils = require "kong.tools.utils"
-local DB = require "kong.db"
+local helpers = require "spec.helpers"
 
-dao_helpers.for_each_dao(function(kong_config)
-  describe("Model (Constraints) with DB: #" .. kong_config.database, function()
+for _, strategy in helpers.each_strategy() do
+  describe("Model (Constraints) with DB: #" .. strategy, function()
     local service_fixture
     local plugin_fixture
     local dao
     local db
 
     setup(function()
-      db = assert(DB.new(kong_config, kong_config.database))
-      assert(db:init_connector())
-
-      dao = assert(Factory.new(kong_config, db))
+      _, db, dao = helpers.get_db_utils(strategy)
       assert(dao:run_migrations())
     end)
 
@@ -77,7 +72,7 @@ dao_helpers.for_each_dao(function(kong_config)
           assert.truthy(err)
           assert.falsy(plugin)
           assert.True(err.unique)
-          assert.matches("[" .. kong_config.database .. " error] " ..
+          assert.matches("[" .. strategy .. " error] " ..
                          "name=already exists with value 'key-auth'",
                          err, nil, true)
         end)
@@ -105,7 +100,7 @@ dao_helpers.for_each_dao(function(kong_config)
           assert.truthy(err)
           assert.falsy(plugin)
           assert.True(err.unique)
-          assert.matches("[" .. kong_config.database .. " error] " ..
+          assert.matches("[" .. strategy .. " error] " ..
                          "name=already exists with value 'rate-limiting'",
                          err, nil, true)
         end)
@@ -143,7 +138,7 @@ dao_helpers.for_each_dao(function(kong_config)
           assert.truthy(err)
           assert.falsy(plugin)
           assert.True(err.unique)
-          assert.matches("[" .. kong_config.database .. " error] " ..
+          assert.matches("[" .. strategy .. " error] " ..
                          "name=already exists with value 'rate-limiting'",
                          err, nil, true)
         end)
@@ -187,7 +182,7 @@ dao_helpers.for_each_dao(function(kong_config)
           assert.truthy(err)
           assert.falsy(plugin)
           assert.True(err.unique)
-          assert.matches("[" .. kong_config.database .. " error] " ..
+          assert.matches("[" .. strategy .. " error] " ..
                          "name=already exists with value 'rate-limiting'",
                          err, nil, true)
         end)
@@ -234,7 +229,7 @@ dao_helpers.for_each_dao(function(kong_config)
           assert.truthy(err)
           assert.falsy(plugin)
           assert.True(err.unique)
-          assert.matches("[" .. kong_config.database .. " error] " ..
+          assert.matches("[" .. strategy .. " error] " ..
                          "name=already exists with value 'rate-limiting'",
                          err, nil, true)
         end)
@@ -249,7 +244,7 @@ dao_helpers.for_each_dao(function(kong_config)
         assert.falsy(plugin)
         assert.truthy(err)
         assert.True(err.foreign)
-        assert.equal("no such Service (id=" .. plugin_fixture.service_id .. ")",
+        assert.equal('No such Service ({id="' .. plugin_fixture.service_id .. '"})',
                      err.message)
       end)
 
@@ -261,7 +256,7 @@ dao_helpers.for_each_dao(function(kong_config)
         assert.falsy(plugin)
         assert.truthy(err)
         assert.True(err.foreign)
-        assert.equal("no such Route (id=" .. plugin_fixture.route_id .. ")",
+        assert.equal('No such Route ({id="' .. plugin_fixture.route_id .. '"})',
                      err.message)
       end)
 
@@ -277,7 +272,8 @@ dao_helpers.for_each_dao(function(kong_config)
         assert.falsy(plugin)
         assert.truthy(err)
         assert.True(err.foreign)
-        assert.matches("consumer_id=does not exist with value '" .. plugin_tbl.consumer_id .. "'", tostring(err), nil, true)
+        assert.equal('No such Consumer ({id="' .. plugin_tbl.consumer_id .. '"})',
+                     err.message)
       end)
 
       it("does not update plugin if invalid foreign key", function()
@@ -291,7 +287,7 @@ dao_helpers.for_each_dao(function(kong_config)
         assert.falsy(plugin)
         assert.truthy(err)
         assert.True(err.foreign)
-        assert.equal("no such Service (id=" .. fake_service_id .. ")",
+        assert.equal('No such Service ({id="' .. fake_service_id .. '"})',
                      err.message)
       end)
     end)
@@ -407,4 +403,4 @@ dao_helpers.for_each_dao(function(kong_config)
       end)
     end)
   end) -- describe
-end) -- for each db
+end -- for each db

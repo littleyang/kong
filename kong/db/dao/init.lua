@@ -154,10 +154,13 @@ end
 
 
 function _M.new(schema, strategy, errors)
+function _M.new(db, schema, strategy, errors)
   local self = {
+    db       = db,
     schema   = schema,
     strategy = strategy,
     errors   = errors,
+    super    = DAO,
   }
 
   if schema.dao then

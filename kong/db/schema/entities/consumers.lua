@@ -3,6 +3,7 @@ local typedefs = require "kong.db.schema.typedefs"
 return {
   name        = "consumers",
   primary_key = { "id" },
+  dao         = "kong.db.dao.consumers",
 
   fields = {
     { id             = typedefs.uuid, },
