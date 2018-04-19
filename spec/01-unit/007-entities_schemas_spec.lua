@@ -603,9 +603,14 @@ describe("Entities Schemas", function()
         new_db = {
           services = {
             select = function() return true end,
+            check_foreign_key = function() return true end,
           },
           routes = {
             select = function() return true end,
+            check_foreign_key = function() return true end,
+          },
+          consumers = {
+            check_foreign_key = function() return true end,
           },
         }
       }
