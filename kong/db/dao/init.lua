@@ -1,4 +1,7 @@
-local cjson        = require "cjson"
+local cjson     = require "cjson"
+local db_errors = require "kong.db.errors"
+local Errors    = require "kong.dao.errors"
+local pl_pretty = require("pl.pretty").write
 
 local setmetatable = setmetatable
 local tonumber     = tonumber
@@ -8,6 +11,7 @@ local pairs        = pairs
 local type         = type
 local min          = math.min
 local log          = ngx.log
+
 
 
 local ERR          = ngx.ERR
@@ -153,7 +157,6 @@ local function generate_foreign_key_methods(self)
 end
 
 
-function _M.new(schema, strategy, errors)
 function _M.new(db, schema, strategy, errors)
   local self = {
     db       = db,
@@ -411,6 +414,28 @@ function DAO:post_crud_event(operation, entity)
     end
   end
 
+end
+
+
+function DAO:check_foreign_key(primary_key, human_name)
+  local entity, err, err_t = self:select(primary_key)
+
+  if err then
+    if err_t.code == db_errors.codes.DATABASE_ERROR then
+      return false, Errors.db(err)
+    end
+
+    return false, Errors.schema(err_t)
+  end
+
+  if entity then
+    return entity
+  end
+
+  local msg = string.format("No such %s (%s)" ,
+                            human_name,
+                            pl_pretty(primary_key, ""))
+  return false, Errors.foreign(msg)
 end
 
 
