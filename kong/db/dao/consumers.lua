@@ -1,5 +1,3 @@
-local singletons = require "kong.singletons"
-
 local _Consumers = {}
 
 local function delete_cascade(self, table_name, fk)
