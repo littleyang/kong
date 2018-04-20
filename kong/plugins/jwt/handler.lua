@@ -165,7 +165,7 @@ local function do_authentication(conf)
   end
 
   -- Retrieve the consumer
-  local consumer_cache_key = singletons.cache:key("consumers", jwt_secret.consumer_id)
+  local consumer_cache_key = singletons.db.consumers:cache_key(jwt_secret.consumer_id)
   local consumer, err      = singletons.cache:get(consumer_cache_key, nil,
                                                   load_consumer,
                                                   jwt_secret.consumer_id, true)
@@ -202,7 +202,7 @@ function JwtHandler:access(conf)
   if not ok then
     if conf.anonymous ~= "" then
       -- get anonymous user
-      local consumer_cache_key = singletons.cache.key("consumers", conf.anonymous)
+      local consumer_cache_key = singletons.db.consumers:cache_key(conf.anonymous)
       local consumer, err      = singletons.cache:get(consumer_cache_key, nil,
                                                       load_consumer,
                                                       conf.anonymous, true)

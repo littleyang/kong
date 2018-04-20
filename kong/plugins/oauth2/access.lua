@@ -558,7 +558,7 @@ local function do_authentication(conf)
   end
 
   -- Retrieve the consumer from the credential
-  local consumer_cache_key = singletons.cache:key("consumers", credential.consumer_id)
+  local consumer_cache_key = singletons.db.consumers:cache_key(credential.consumer_id)
   local consumer, err      = singletons.cache:get(consumer_cache_key, nil,
                                                   load_consumer_into_memory,
                                                   credential.consumer_id)
@@ -599,7 +599,7 @@ function _M.execute(conf)
   if not ok then
     if conf.anonymous ~= "" then
       -- get anonymous user
-      local consumer_cache_key = singletons.cache:key("consumers", conf.anonymous)
+      local consumer_cache_key = singletons.db.consumers:cache_key(conf.anonymous)
       local consumer, err      = singletons.cache:get(consumer_cache_key, nil,
                                                       load_consumer_into_memory,
                                                       conf.anonymous, true)

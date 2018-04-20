@@ -11,6 +11,7 @@ local pairs        = pairs
 local type         = type
 local min          = math.min
 local log          = ngx.log
+local fmt          = string.format
 
 
 
@@ -436,6 +437,17 @@ function DAO:check_foreign_key(primary_key, human_name)
                             human_name,
                             pl_pretty(primary_key, ""))
   return false, Errors.foreign(msg)
+end
+
+
+function DAO:cache_key(arg1, arg2, arg3, arg4, arg5)
+  return fmt("%s:%s:%s:%s:%s:%s",
+             self.schema.name,
+             arg1 == nil and "" or arg1,
+             arg2 == nil and "" or arg2,
+             arg3 == nil and "" or arg3,
+             arg4 == nil and "" or arg4,
+             arg5 == nil and "" or arg5)
 end
 
 
