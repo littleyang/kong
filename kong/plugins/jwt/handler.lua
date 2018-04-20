@@ -70,7 +70,7 @@ local function load_credential(jwt_secret_key)
 end
 
 local function load_consumer(consumer_id, anonymous)
-  local result, err = singletons.dao.consumers:select { id = consumer_id }
+  local result, err = singletons.db.consumers:select { id = consumer_id }
   if not result then
     if anonymous and not err then
       err = 'anonymous consumer "' .. consumer_id .. '" not found'
