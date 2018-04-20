@@ -442,15 +442,6 @@ describe("Admin API (" .. strategy .. "): ", function()
           local body = assert.res_status(204, res)
           assert.equal("", body)
         end)
-        describe("error", function()
-          it("returns 404 if not found", function()
-            local res = assert(client:send {
-              method = "DELETE",
-              path = "/consumers/_inexistent_"
-            })
-            assert.res_status(404, res)
-          end)
-        end)
       end)
     end)
   end)

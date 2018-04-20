@@ -212,6 +212,11 @@ end
 -- /services/:services
 local function patch_entity_endpoint(schema, foreign_schema, foreign_field_name)
   return function(self, db, helpers)
+    local args_post = self.args.post
+    if not next(args_post) then
+      responses.send(400, "empty body")
+    end
+
     local entity, _, err_t = select_entity(db, schema, self.params)
     if err_t then
       return handle_error(err_t)
