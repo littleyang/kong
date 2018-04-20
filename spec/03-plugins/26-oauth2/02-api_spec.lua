@@ -251,7 +251,7 @@ for _, strategy in helpers.each_strategy() do
       local credential
       before_each(function()
         dao:truncate_table("oauth2_credentials")
-        dao:truncate_table("consumers")
+        db:truncate("consumers")
         db:truncate("services")
 
         service = bp.services:insert({ host = "oauth2_token.com" })

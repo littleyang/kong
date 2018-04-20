@@ -1824,7 +1824,7 @@ for _, strategy in helpers.each_strategy() do
         })
         local body = cjson.decode(assert.res_status(200, res))
 
-        local consumer = db.consumers:find_all({username = "bob"})[1]
+        local consumer = db.consumers:select_by_username("bob")
         assert.are.equal(consumer.id, body.headers["x-consumer-id"])
         assert.are.equal(consumer.username, body.headers["x-consumer-username"])
         assert.are.equal("userid123", body.headers["x-authenticated-userid"])
@@ -1844,7 +1844,7 @@ for _, strategy in helpers.each_strategy() do
         })
         local body = cjson.decode(assert.res_status(200, res))
 
-        local consumer = db.consumers:find_all({username = "bob"})[1]
+        local consumer = db.consumers:select_by_username("bob")
         assert.are.equal(consumer.id, body.headers["x-consumer-id"])
         assert.are.equal(consumer.username, body.headers["x-consumer-username"])
         assert.are.equal("userid123", body.headers["x-authenticated-userid"])
