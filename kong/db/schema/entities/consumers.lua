@@ -8,8 +8,8 @@ return {
   fields = {
     { id             = typedefs.uuid, },
     { created_at     = { type = "integer", timestamp = true, auto = true }, },
-    { custom_id      = { type = "string",  unique = true }, },
     { username       = { type = "string",  unique = true }, },
+    { custom_id      = { type = "string",  unique = true }, },
   },
 
   entity_checks = {
