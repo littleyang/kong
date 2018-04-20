@@ -127,6 +127,7 @@ build = {
     ["kong.db"] = "kong/db/init.lua",
     ["kong.db.errors"] = "kong/db/errors.lua",
     ["kong.db.dao"] = "kong/db/dao/init.lua",
+    ["kong.db.dao.consumers"] = "kong/db/dao/consumers.lua",
     ["kong.db.schema"] = "kong/db/schema/init.lua",
     ["kong.db.schema.entities.consumers"] = "kong/db/schema/entities/consumers.lua",
     ["kong.db.schema.entities.routes"] = "kong/db/schema/entities/routes.lua",
